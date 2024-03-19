@@ -10,9 +10,19 @@ import string
 import email
 from langdetect import detect
 import warnings
+import time
+import os
 warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
 ## Helper functions
+
+# Logging function
+def logger(txt):
+    log_file = "log.txt"
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(txt)
+        f.write("\n")
+        f.close()
 
 # Pre-translation processing
 def html_remover(txt):
@@ -85,8 +95,9 @@ def detect_lang(text):
         text = unidecode(text)
         try:
             lang = detect(text)
-        except:
-            print(text)
+        except Exception as e:
+            logger(f"detect_lang failed \n {text}")
+            logger(str(e))
             return None
     return lang
 
@@ -118,8 +129,14 @@ def translate(text, translator, max_size=1000):
             try:
                 translated_text = translator.translate(chunk)
             except Exception as e:
-                print(e)
-                translated_text = chunk
+                logger(f"long_translate failed once \n {chunk}")
+                try:
+                    # Try again, might be api response error
+                    translated_text = translator.translate(chunk)
+                except Exception as e:
+                    logger(f"long_translate failed twice \n {chunk}")
+                    logger(str(e))
+                    translated_text = chunk
             if not translated_text:
                 translated_text = ''
         new_pipe_text.append(translated_text)
@@ -188,7 +205,7 @@ def pre_translation_preprocessing_worker(document):
         message_length = 0
     return (doc_id, message, lang, message_length)
 
-def batch_translator(input_queue, output_queue, max_length=1000):
+def batch_translator(input_queue, output_queue, max_length, translator_free_count):
     batch_ids = []
     batch_messages = []
     batch_length = 0
@@ -197,34 +214,60 @@ def batch_translator(input_queue, output_queue, max_length=1000):
         item = input_queue.get()
         if item is None:  # Check for the sentinel value
             if batch_messages:  # Ensure any remaining batch gets sent
+                while translator_free_count.value == 0: # Check if translator is free
+                    time.sleep(1)
+                translator_free_count.value -= 1 # Once free, we reduce count
                 try:
                     translated_messages = auto_translator.translate_batch(batch_messages)
-                except:
-                    print(batch_messages)
-                    translated_messages = batch_messages
-                full_outputs = zip(batch_ids, translated_messages)
+                    #translated_messages = batch_messages
+                except Exception as e:
+                    logger(f"batch_translate failed once \n {batch_messages}")
+                    logger(str(e))
+                    try:
+                        translated_messages = auto_translator.translate_batch(batch_messages)
+                    except Exception as e:
+                        logger(f"batch_translate failed twice \n {batch_messages}")
+                        logger(str(e))
+                        translated_messages = batch_messages
+                translator_free_count.value += 1 # Free usage of translator
+                full_outputs = zip(batch_ids, batch_messages, translated_messages)
                 for item in full_outputs:
                     output_queue.put(item)
-            output_queue.put(None)  # Signal the consumer this is the end
             break
         doc_id, message, lang, message_length = item
         if not lang or lang=="en":
-            output_queue.put((doc_id, message))
+            output_queue.put((doc_id, message, message))
         elif message_length > max_length:
+            while translator_free_count.value == 0: # Check if translator is free
+                time.sleep(1)
+                translator_free_count.value -= 1 # Once free, we reduce count
             translated_message = translate(message, auto_translator)
-            output_queue.put((doc_id, translated_message))
+            translator_free_count.value += 1 # Once done, we free translator
+            #translated_message = message
+            output_queue.put((doc_id, message, translated_message))
         else:
             new_batch_length = batch_length + message_length
             if new_batch_length >= max_length:
+                while translator_free_count.value == 0: # Check if translator is free
+                    time.sleep(1)
+                translator_free_count.value -= 1 # Once free, we reduce count
                 # Translate as a batch
                 try:
                     translated_messages = auto_translator.translate_batch(batch_messages)
-                except:
-                    print(batch_messages)
-                    translated_messages = batch_messages
-                full_outputs = zip(batch_ids, translated_messages)
+                    #translated_messages = batch_messages
+                except Exception as e:
+                    logger(f"batch_translate failed once \n {batch_messages}")
+                    logger(str(e))
+                    try:
+                        translated_messages = auto_translator.translate_batch(batch_messages)
+                    except Exception as e:
+                        logger(f"batch_translate failed twice \n {batch_messages}")
+                        logger(str(e))
+                        translated_messages = batch_messages
+                translator_free_count.value += 1 # Once done, we free translator
+                full_outputs = zip(batch_ids, batch_messages, translated_messages)
                 for item in full_outputs:
-                    # (doc_id, translated_message)
+                    # (doc_id, batch_message, translated_message)
                     output_queue.put(item)
                 # Reset batch
                 batch_ids = []
@@ -241,50 +284,75 @@ def post_translation_processing_worker(output_queue, output_file):
             item = output_queue.get()
             if item is None:  # End of processing
                 break
-            doc_id, translated_message = item
+            doc_id, message, translated_message = item
             if not translated_message:
                 # In case message is None
                 translated_message = ""
+            processed_message = translated_message
             processed_message = remove_nonenglish(translated_message)
             processed_message = replace_tokens(processed_message)
             processed_message = remove_punctuations(processed_message)
-            document = {"doc_id": doc_id, "translated": translated_message, "processed": processed_message}
+            document = {"doc_id": doc_id, "pretranslation":message, "translated": translated_message, "processed": processed_message}
             json.dump(document, f)
             f.write("\n")    
         
 
 def preprocess_pipeline(input_documents, output_file, max_length=1000):
     # Use Manager queue here for better stability in some systems
+    start = time.time()
     manager = multiprocessing.Manager()
+    cpu_count = multiprocessing.cpu_count()
+    logging.info(f"No. of proccesses: {cpu_count}")
+    translator_free_count = manager.Value('i', 3, lock=True) # Prevent translator from sending too many concurrent api requests
+    translator_pool = []
     pre_translation_input_queue = manager.Queue()
     pre_translation_output_queue = manager.Queue()
     output_queue = manager.Queue()
     # Prepare processes
     data_generator_process = multiprocessing.Process(target=dataframe_generator, args=(input_documents, pre_translation_input_queue, 100))
-    translation_process = multiprocessing.Process(target=batch_translator, args=(pre_translation_output_queue, output_queue, max_length))
+    for i in range(cpu_count // 4):
+        new_translation_process = multiprocessing.Process(target=batch_translator, args=(pre_translation_output_queue, output_queue, max_length, translator_free_count))
+        new_translation_process.start()
+        translator_pool.append(new_translation_process)
     post_translation_process = multiprocessing.Process(target=post_translation_processing_worker, args=(output_queue, output_file))
     data_generator_process.start()
-    translation_process.start()
     post_translation_process.start()
-
+    logging.info(f"Process starting, time: {time.time()-start}s")
     # Distribute documents to preprocessing
-    with multiprocessing.Pool(processes=multiprocessing.cpu_count() // 2) as pool:
+    with multiprocessing.Pool(processes=cpu_count // 4) as pool:
         data_batch = pre_translation_input_queue.get()
         while data_batch is not None:
             result = pool.map(pre_translation_preprocessing_worker, data_batch)
             for item in result:
                 pre_translation_output_queue.put(item)
             data_batch = pre_translation_input_queue.get()
-    pre_translation_output_queue.put(None)  # Signal the end to batcher
-
-    translation_process.join()
+    logging.info(f"preprocess done, time: {time.time()-start}s")
+    for i in range(cpu_count // 4):
+        new_translation_process = multiprocessing.Process(target=batch_translator, args=(pre_translation_output_queue, output_queue, max_length, translator_free_count))
+        new_translation_process.start()
+        translator_pool.append(new_translation_process)
+    logging.info(f"translator pool has {len(translator_pool)} processes")
+    for i in range(len(translator_pool)):
+        pre_translation_output_queue.put(None)  # Signal the end to batcher
+    for translator_process in translator_pool:
+        translator_process.join()
+    logging.info(f"translation done, time: {time.time()-start}s")
+    output_queue.put(None)  # Signal the consumer this is the end
     post_translation_process.join()
+    logging.info(f"Processing and writing done, time: {time.time()-start}s")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     input_documents = pd.read_pickle("Data/sample.pkl")
-    output_file = "output.pkl"
-    max_length = 1000
+    output_file = "output.json"
+    log_file = "log.txt"
+    if os.path.exists(output_file):
+        os.remove(output_file)
+    if os.path.exists(log_file):
+        os.remove(log_file)
+    max_length = 1200
     with open(output_file, "w") as f: # Creates output file
+        pass
+    with open(log_file, "w") as f: # Creates output file
         pass
     preprocess_pipeline(input_documents, output_file, max_length)
