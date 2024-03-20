@@ -214,7 +214,8 @@ def batch_translator(input_queue, output_queue, max_length, translator_free_coun
         item = input_queue.get()
         if item is None:  # Check for the sentinel value
             if batch_messages:  # Ensure any remaining batch gets sent
-                while translator_free_count.value == 0: # Check if translator is free
+                while translator_free_count.value <= 0: # Check if translator is free
+                    #logger(f"Translator used, waiting..., count{translator_free_count.value}")
                     time.sleep(1)
                 translator_free_count.value -= 1 # Once free, we reduce count
                 try:
@@ -238,9 +239,10 @@ def batch_translator(input_queue, output_queue, max_length, translator_free_coun
         if not lang or lang=="en":
             output_queue.put((doc_id, message, message))
         elif message_length > max_length:
-            while translator_free_count.value == 0: # Check if translator is free
+            while translator_free_count.value <= 0: # Check if translator is free
+                #logger(f"Translator used, waiting..., count{translator_free_count.value}")
                 time.sleep(1)
-                translator_free_count.value -= 1 # Once free, we reduce count
+            translator_free_count.value -= 1 # Once free, we reduce count
             translated_message = translate(message, auto_translator)
             translator_free_count.value += 1 # Once done, we free translator
             #translated_message = message
@@ -248,7 +250,8 @@ def batch_translator(input_queue, output_queue, max_length, translator_free_coun
         else:
             new_batch_length = batch_length + message_length
             if new_batch_length >= max_length:
-                while translator_free_count.value == 0: # Check if translator is free
+                while translator_free_count.value <= 0: # Check if translator is free
+                    #logger(f"Translator used, waiting..., count{translator_free_count.value}")
                     time.sleep(1)
                 translator_free_count.value -= 1 # Once free, we reduce count
                 # Translate as a batch
@@ -310,7 +313,7 @@ def preprocess_pipeline(input_documents, output_file, max_length=1000):
     output_queue = manager.Queue()
     # Prepare processes
     data_generator_process = multiprocessing.Process(target=dataframe_generator, args=(input_documents, pre_translation_input_queue, 100))
-    for i in range(cpu_count // 4):
+    for i in range(cpu_count // 2):
         new_translation_process = multiprocessing.Process(target=batch_translator, args=(pre_translation_output_queue, output_queue, max_length, translator_free_count))
         new_translation_process.start()
         translator_pool.append(new_translation_process)
@@ -343,8 +346,8 @@ def preprocess_pipeline(input_documents, output_file, max_length=1000):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    input_documents = pd.read_pickle("Data/sample.pkl")
-    output_file = "output.json"
+    input_documents = pd.read_pickle("Data/first.pkl")
+    output_file = "first.json"
     log_file = "log.txt"
     if os.path.exists(output_file):
         os.remove(output_file)
