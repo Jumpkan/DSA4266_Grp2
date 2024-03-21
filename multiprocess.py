@@ -31,8 +31,11 @@ def html_remover(txt):
     Input: doc
     Output: String
     """
-    soup=BeautifulSoup(txt,'html.parser')
-    a=soup.get_text()
+    try:    
+        soup=BeautifulSoup(txt,'html.parser')
+        a=soup.get_text()
+    except:
+        a = txt
     return a
 
 def join_spaces(text):
@@ -313,7 +316,7 @@ def preprocess_pipeline(input_documents, output_file, max_length=1000):
     output_queue = manager.Queue()
     # Prepare processes
     data_generator_process = multiprocessing.Process(target=dataframe_generator, args=(input_documents, pre_translation_input_queue, 100))
-    for i in range(cpu_count // 2):
+    for i in range(cpu_count // 4):
         new_translation_process = multiprocessing.Process(target=batch_translator, args=(pre_translation_output_queue, output_queue, max_length, translator_free_count))
         new_translation_process.start()
         translator_pool.append(new_translation_process)
@@ -346,8 +349,8 @@ def preprocess_pipeline(input_documents, output_file, max_length=1000):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    input_documents = pd.read_pickle("Data/first.pkl")
-    output_file = "first.json"
+    input_documents = pd.read_pickle("Data/b64.pkl")
+    output_file = "b64.json"
     log_file = "log.txt"
     if os.path.exists(output_file):
         os.remove(output_file)
