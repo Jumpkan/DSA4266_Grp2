@@ -1,3 +1,6 @@
 # Ignore data files
 Data/*
 GloVe/*
+bert_model/*
+model_checkpoints/*
+utils/*
