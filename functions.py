@@ -51,7 +51,10 @@ from lime.lime_text import LimeTextExplainer
 import pkg_resources
 
 import nltk 
+import math
 nltk.download('stopwords')
+nltk.download('punkt')
+nltk.download('wordnet')
 from nltk import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
 from nltk import FreqDist
