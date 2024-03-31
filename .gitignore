@@ -1,6 +1,6 @@
 # Ignore data files
 Data/*
 GloVe/*
-models/*
+Models/*
 model_checkpoints/*
 utils/*

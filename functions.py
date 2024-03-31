@@ -8,6 +8,8 @@ import string
 import matplotlib.pyplot as plt
 # import wordcloud
 import seaborn as sns
+import optuna
+import tqdm
 
 # import plotly.express as px
 from collections import Counter
@@ -29,7 +31,7 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.feature_selection import SelectKBest
 from sklearn.preprocessing import KBinsDiscretizer, OneHotEncoder, StandardScaler, LabelEncoder
-# from sklearn.metrics import confusion_matrix, plot_confusion_matrix
+from sklearn.metrics import confusion_matrix
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
 from sklearn.utils.class_weight import compute_class_weight, compute_sample_weight
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
@@ -49,11 +51,14 @@ from lime.lime_text import LimeTextExplainer
 import pkg_resources
 
 import nltk 
+import math
 nltk.download('stopwords')
+nltk.download('punkt')
+nltk.download('wordnet')
 from nltk import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
 from nltk import FreqDist
-from nltk.stem import WordNetLemmatizer
+from nltk.stem import WordNetLemmatizer, PorterStemmer
 from nltk.corpus import wordnet
 from nltk.collocations import *
 from nltk.collocations import BigramAssocMeasures, BigramCollocationFinder
