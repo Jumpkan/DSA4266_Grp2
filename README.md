@@ -3,7 +3,7 @@ __Building the Image__
 docker build -t transformers:latest .  
   
 __Running the Container with GPU support__  
-docker run -it --gpus all transformers:latest -h transformer_jax  
+docker run -it --gpus all -h transformer_jax transformers:latest   
   
 __Attaching to a running container in VSCode__  
 https://code.visualstudio.com/docs/devcontainers/attach-container  
