@@ -6,21 +6,18 @@ import re
 import json
 import string
 import matplotlib.pyplot as plt
-# import wordcloud
-import seaborn as sns
 import optuna
 import tqdm
 
 # import plotly.express as px
 from collections import Counter
-
-from gensim.models import Word2Vec
-from gensim.utils import simple_preprocess
-from gensim.test.utils import datapath, get_tmpfile
-from gensim.models import KeyedVectors
-from gensim.scripts.glove2word2vec import glove2word2vec
-from gensim.models import Phrases
-from gensim.models.phrases import Phraser
+# from gensim.models import Word2Vec
+# from gensim.utils import simple_preprocess
+# from gensim.test.utils import datapath, get_tmpfile
+# from gensim.models import KeyedVectors
+# from gensim.scripts.glove2word2vec import glove2word2vec
+# from gensim.models import Phrases
+# from gensim.models.phrases import Phraser
 
 from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline
@@ -62,8 +59,6 @@ from nltk.stem import WordNetLemmatizer, PorterStemmer
 from nltk.corpus import wordnet
 from nltk.collocations import *
 from nltk.collocations import BigramAssocMeasures, BigramCollocationFinder
-
-import spacy
 
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.layers import Input, Dense, LSTM, Embedding, GRU
