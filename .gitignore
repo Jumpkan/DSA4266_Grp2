@@ -4,3 +4,4 @@ GloVe/*
 Models/*
 model_checkpoints/*
 utils/*
+__pycache__
