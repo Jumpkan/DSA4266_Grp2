@@ -349,8 +349,8 @@ def preprocess_pipeline(input_documents, output_file, max_length=1000):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    input_documents = pd.read_pickle("Data/b64.pkl")
-    output_file = "b64.json"
+    input_documents = pd.read_pickle("Data/first.pkl")
+    output_file = "first.json"
     log_file = "log.txt"
     if os.path.exists(output_file):
         os.remove(output_file)
